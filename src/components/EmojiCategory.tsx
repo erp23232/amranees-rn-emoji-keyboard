@@ -32,10 +32,14 @@ export const EmojiCategory = React.memo(
     item: { title, data },
     setKeyboardScrollOffsetY,
     activeCategoryIndex,
+    disableInnerScroll,
+    forceRenderAll,
   }: {
     item: EmojisByCategory
     setKeyboardScrollOffsetY: React.Dispatch<React.SetStateAction<number>>
     activeCategoryIndex: number
+    disableInnerScroll?: boolean
+    forceRenderAll?: boolean
   }) => {
     const {
       onEmojiSelected,
@@ -55,7 +59,9 @@ export const EmojiCategory = React.memo(
 
     const { keyboardHeight } = useKeyboard(true)
 
-    const contentContainerStyle = { paddingBottom: keyboardHeight }
+    const contentContainerStyle = disableInnerScroll
+      ? undefined
+      : { paddingBottom: keyboardHeight }
 
     const { setKeyboardState, keyboardState } = useKeyboardStore()
 
@@ -150,22 +156,28 @@ export const EmojiCategory = React.memo(
     // with InteractionManager we can show emojis after interaction is finished
     // It helps with delay during category change animation
     InteractionManager.runAfterInteractions(() => {
+      if (forceRenderAll) {
+        setMaxIndex(data.length)
+        return
+      }
       if (maxIndex === 0 && data.length) {
         setMaxIndex(minimalEmojisAmountToDisplay)
       }
     })
 
     const onEndReached = () => {
+      if (forceRenderAll) return
       if (maxIndex <= data.length) {
         setMaxIndex(data.length)
       }
     }
 
     React.useEffect(() => {
+      if (forceRenderAll) return
       if (CATEGORIES[activeCategoryIndex] !== title) {
         setMaxIndex(0)
       }
-    }, [activeCategoryIndex, title])
+    }, [activeCategoryIndex, title, forceRenderAll])
 
     const flatListData = data.slice(0, maxIndex)
 
@@ -185,13 +197,18 @@ export const EmojiCategory = React.memo(
             numColumns={numberOfColumns}
             renderItem={renderItem}
             onScroll={handleOnScroll}
-            ListFooterComponent={<ListFooterComponent categoryPosition={categoryPosition} />}
+            ListFooterComponent={
+              disableInnerScroll ? undefined : (
+                <ListFooterComponent categoryPosition={categoryPosition} />
+              )
+            }
             initialNumToRender={10}
             windowSize={16}
             maxToRenderPerBatch={5}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={contentContainerStyle}
             scrollEventThrottle={16}
+            scrollEnabled={!disableInnerScroll}
           />
         )}
       </View>

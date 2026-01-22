@@ -102,7 +102,7 @@ export const Categories = (p: Props) => {
   }, [renderList])
 
   return (
-    <View style={[categoryPosition === 'floating' && styles.floating]}>
+    <View style={[styles.container]}>
       <View style={getStylesBasedOnPosition()}>
         <FlatList
           data={renderData}
@@ -122,13 +122,16 @@ export const Categories = (p: Props) => {
 }
 
 const styles = StyleSheet.create({
-  floating: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
+  container: {
+    padding: 8,
   },
+  // floating: {
+  //   position: 'absolute',
+  //   bottom: 20,
+  //   left: 20,
+  //   right: 20,
+  //   alignItems: 'center',
+  // },
   navigation: {
     padding: 3,
     alignItems: 'center',
