@@ -1,18 +1,9 @@
 import * as React from 'react'
-import {
-  StyleSheet,
-  View,
-  FlatList,
-  Animated,
-  SafeAreaView,
-  Platform,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native'
+import { StyleSheet, View, FlatList, SafeAreaView, Platform } from 'react-native'
 import { type EmojisByCategory } from '../types'
 import { EmojiCategory } from './EmojiCategory'
 import { KeyboardContext } from '../contexts/KeyboardContext'
-import { Categories, CATEGORY_ELEMENT_WIDTH } from './Categories'
+import { Categories } from './Categories'
 import { SearchBar } from './SearchBar'
 import { useKeyboardStore } from '../store/useKeyboardStore'
 import { ConditionalContainer } from './ConditionalContainer'
@@ -26,7 +17,7 @@ export const EmojiStaticKeyboard = React.memo(
       activeCategoryIndex,
       setActiveCategoryIndex,
       onCategoryChangeFailed,
-      enableCategoryChangeGesture,
+      // enableCategoryChangeGesture,
       categoryPosition,
       enableSearchBar,
       customButtons,
@@ -37,51 +28,27 @@ export const EmojiStaticKeyboard = React.memo(
       styles: themeStyles,
       shouldAnimateScroll,
       enableCategoryChangeAnimation,
-      width,
+      enableSearchAnimation,
+      setShouldAnimateScroll,
+      // width,
       setWidth,
     } = React.useContext(KeyboardContext)
     const { keyboardState } = useKeyboardStore()
     const flatListRef = React.useRef<FlatList>(null)
-    const hasMomentumBegan = React.useRef(false)
-
-    const getItemLayout = React.useCallback(
-      (_: EmojisByCategory[] | null | undefined, index: number) => ({
-        length: width,
-        offset: width * index,
-        index,
-      }),
-      [width],
-    )
+    // const hasMomentumBegan = React.useRef(false)
 
     const [keyboardScrollOffsetY, setKeyboardScrollOffsetY] = React.useState(0)
 
     const renderItem = React.useCallback(
-      (props) => {
-        const item = { ...props.item, data: [] }
-        const shouldRenderEmojis =
-          activeCategoryIndex === props.index ||
-          activeCategoryIndex === props.index - 1 ||
-          activeCategoryIndex === props.index + 1
-
-        if (shouldRenderEmojis) {
-          return (
-            <EmojiCategory
-              setKeyboardScrollOffsetY={setKeyboardScrollOffsetY}
-              {...props}
-              activeCategoryIndex={activeCategoryIndex}
-            />
-          )
-        } else {
-          return (
-            <EmojiCategory
-              setKeyboardScrollOffsetY={setKeyboardScrollOffsetY}
-              {...props}
-              item={item}
-              activeCategoryIndex={activeCategoryIndex}
-            />
-          )
-        }
-      },
+      (props) => (
+        <EmojiCategory
+          setKeyboardScrollOffsetY={setKeyboardScrollOffsetY}
+          {...props}
+          activeCategoryIndex={activeCategoryIndex}
+          disableInnerScroll
+          forceRenderAll
+        />
+      ),
       [activeCategoryIndex],
     )
 
@@ -99,32 +66,45 @@ export const EmojiStaticKeyboard = React.memo(
       setKeyboardScrollOffsetY(0)
     }, [activeCategoryIndex])
 
+    React.useEffect(() => {
+      if (searchPhrase && searchPhrase.length >= 1) {
+        const idx = renderList.findIndex((c) => c.title === 'search')
+        if (idx !== -1) {
+          setShouldAnimateScroll(enableSearchAnimation)
+          setActiveCategoryIndex(idx)
+          scrollEmojiCategoryListToIndex(idx)
+          if (idx === 0) {
+            // Fallback to top in case scrollToIndex fails due to measurement
+            flatListRef.current?.scrollToOffset({ offset: 0, animated: shouldAnimateScroll })
+          }
+        }
+      } else if (!searchPhrase || searchPhrase.length === 0) {
+        setShouldAnimateScroll(enableCategoryChangeAnimation)
+        setActiveCategoryIndex(0)
+        scrollEmojiCategoryListToIndex(0)
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: shouldAnimateScroll })
+      }
+    }, [
+      searchPhrase,
+      renderList,
+      scrollEmojiCategoryListToIndex,
+      setActiveCategoryIndex,
+      setShouldAnimateScroll,
+      enableSearchAnimation,
+      enableCategoryChangeAnimation,
+      shouldAnimateScroll,
+    ])
+
     const keyExtractor = React.useCallback((item: EmojisByCategory) => item.title, [])
-    const scrollNav = React.useRef(new Animated.Value(0)).current
-
-    const handleScroll = React.useCallback(
-      (el: NativeSyntheticEvent<NativeScrollEvent>) => {
-        const index = el.nativeEvent.contentOffset.x / width
-        scrollNav.setValue(index * CATEGORY_ELEMENT_WIDTH)
-      },
-      [scrollNav, width],
-    )
-
-    const onMomentumScrollBegin = React.useCallback(() => {
-      hasMomentumBegan.current = true
-    }, [])
-
-    const onMomentumScrollEnd = React.useCallback(
-      (el: NativeSyntheticEvent<NativeScrollEvent>) => {
-        if (!hasMomentumBegan.current) return
-
-        const index = el.nativeEvent.contentOffset.x / width
-        setActiveCategoryIndex(Math.round(index))
-
-        hasMomentumBegan.current = false
-      },
-      [setActiveCategoryIndex, width],
-    )
+    const viewabilityConfig = React.useRef({ viewAreaCoveragePercentThreshold: 50, minimumViewTime: 120 }).current
+    const onViewableItemsChanged = React.useRef(({ viewableItems }: any) => {
+      // When searching, don't override the active category set by SearchBar
+      if (searchPhrase && searchPhrase.length > 0) return
+      if (viewableItems && viewableItems.length > 0) {
+        const first = viewableItems[0]
+        if (typeof first.index === 'number') setActiveCategoryIndex(first.index)
+      }
+    }).current
 
     return (
       <View
@@ -149,18 +129,18 @@ export const EmojiStaticKeyboard = React.memo(
         >
           <>
             <View
-              style={
+              style={[
                 categoryPosition === 'top'
-                  ? [styles.searchContainer, { marginBottom: 16 }]
-                  : styles.searchContainer
-              }
+                  ? [styles.searchContainer]
+                  : styles.searchContainer,
+              ]}
             >
               {enableSearchBar && (
                 <SearchBar scrollEmojiCategoryListToIndex={scrollEmojiCategoryListToIndex} />
               )}
               {customButtons}
             </View>
-            <Animated.FlatList<EmojisByCategory>
+            <FlatList<EmojisByCategory>
               extraData={[keyboardState.recentlyUsed.length, searchPhrase]}
               data={renderList}
               keyExtractor={keyExtractor}
@@ -168,23 +148,20 @@ export const EmojiStaticKeyboard = React.memo(
               removeClippedSubviews={isAndroid}
               ref={flatListRef}
               onScrollToIndexFailed={onCategoryChangeFailed}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              pagingEnabled
+              showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
-              getItemLayout={getItemLayout}
-              scrollEnabled={enableCategoryChangeGesture}
-              initialNumToRender={1}
-              maxToRenderPerBatch={1}
-              onScroll={handleScroll}
-              keyboardShouldPersistTaps="handled"
-              onMomentumScrollBegin={onMomentumScrollBegin}
-              onMomentumScrollEnd={onMomentumScrollEnd}
+              scrollEnabled
+              keyboardDismissMode="on-drag"
+              initialNumToRender={2}
+              maxToRenderPerBatch={2}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              keyboardShouldPersistTaps="always"
+              style={{ flex: 1 }}
             />
-            <Categories
-              scrollEmojiCategoryListToIndex={scrollEmojiCategoryListToIndex}
-              scrollNav={enableCategoryChangeGesture ? scrollNav : undefined}
-            />
+            <View>
+              <Categories scrollEmojiCategoryListToIndex={scrollEmojiCategoryListToIndex} />
+            </View>
             <SkinTones keyboardScrollOffsetY={keyboardScrollOffsetY} />
           </>
         </ConditionalContainer>
@@ -202,6 +179,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: 16,
+    paddingBottom: 8,
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },

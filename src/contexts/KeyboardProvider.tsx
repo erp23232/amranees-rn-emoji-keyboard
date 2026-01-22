@@ -146,43 +146,56 @@ export const KeyboardProvider: React.FC<ProviderProps> = React.memo((props) => {
       return true
     })
 
-    if (keyboardState.recentlyUsed.length && props.enableRecentlyUsed) {
-      data.push({
-        title: 'recently_used' as CategoryTypes,
-        data: keyboardState.recentlyUsed,
-      })
-    }
+    // Build search category when enabled
+    let searchCategory: EmojisByCategory | null = null
     if (props.enableSearchBar) {
-      data.push({
+      const q = searchPhrase.trim().toLowerCase()
+      searchCategory = {
         title: 'search' as CategoryTypes,
         data: emojisByCategory
           .map((group) => group.data)
           .flat()
           .filter((emoji) => {
-            if (searchPhrase.length < 2) return false
+            if (q.length < 1) return false
 
             const isInKeywords =
               emoji?.keywords &&
               emoji.keywords.length > 0 &&
-              emoji.keywords.some((keyword) =>
-                keyword.toLowerCase().includes(searchPhrase.toLowerCase()),
-              )
+              emoji.keywords.some((keyword) => keyword.toLowerCase().includes(q))
 
             return (
-              emoji.name.toLowerCase().includes(searchPhrase.toLowerCase()) ||
-              emoji.emoji.toLowerCase().includes(searchPhrase) ||
+              emoji.name.toLowerCase().includes(q) ||
+              emoji.emoji.toLowerCase().includes(q) ||
               isInKeywords
             )
           }),
-      })
+      }
+    }
+
+    if (keyboardState.recentlyUsed.length && props.enableRecentlyUsed) {
+      data = [
+        {
+          title: 'recently_used' as CategoryTypes,
+          data: keyboardState.recentlyUsed,
+        },
+        ...data,
+      ]
+    }
+
+    // Place search category at the very beginning when there is an active query
+    if (props.enableSearchBar && searchCategory && searchCategory.data.length >= 0 && searchPhrase.trim().length > 0) {
+      data = [searchCategory, ...data]
     }
     if (props.categoryOrder) {
-      const orderedData = props.categoryOrder.flatMap((name) =>
+      const hasActiveSearch = !!(props.enableSearchBar && searchCategory && searchPhrase.trim().length > 0)
+      const orderWithSearch = hasActiveSearch
+        ? (['search', ...props.categoryOrder] as CategoryTypes[])
+        : props.categoryOrder
+
+      const orderedData = orderWithSearch.flatMap((name) =>
         data.filter((el) => el.title === name),
       )
-      const restData = data.filter(
-        (el) => !props?.categoryOrder?.includes(el.title as CategoryTypes),
-      )
+      const restData = data.filter((el) => !orderWithSearch.includes(el.title as CategoryTypes))
       data = [...orderedData, ...restData]
     }
     return data as EmojisByCategory[]
